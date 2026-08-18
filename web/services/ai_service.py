@@ -1,6 +1,9 @@
 import json
+import logging
 from web.config import Settings
 from web.models import Finding
+
+logger = logging.getLogger("aegis.ai")
 
 
 class AIService:
@@ -9,6 +12,7 @@ class AIService:
     def enrich(self, finding: Finding) -> Finding:
         """Interpret a ZAP finding only; never creates or changes findings/severity."""
         if not self.settings.gemini_api_key:
+            logger.warning("GEMINI_API_KEY not configured; using ZAP fallback for %s", finding.alert_id)
             finding.plain_language_title = finding.plain_language_title or finding.name
             finding.plain_language_summary = finding.plain_language_summary or finding.zap_description
             finding.recommended_action = finding.recommended_action or finding.zap_solution
@@ -24,5 +28,6 @@ class AIService:
                 if field in {"plain_language_title", "plain_language_summary", "business_impact", "recommended_action", "owasp_category"}: setattr(finding, field, data[field])
             finding.ai_available = True
         except Exception:
+            logger.exception("Gemini enrichment failed for %s (model=%s)", finding.alert_id, self.settings.gemini_model)
             finding.ai_available = False
         return finding
