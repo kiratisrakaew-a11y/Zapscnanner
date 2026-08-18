@@ -1,6 +1,9 @@
 FROM zaproxy/zap-stable:2.16.1
 USER root
 RUN pip install --no-cache-dir --break-system-packages google-cloud-firestore==2.21.0
+# Cloud Run Jobs have no volume mounted at /zap/wrk (unlike `docker run -v`),
+# so create it; the ZAP report job writes zap-report.json here.
+RUN mkdir -p /zap/wrk && chown -R zap:zap /zap/wrk
 COPY scanner /app/scanner
 ENV PYTHONPATH=/app
 USER zap
