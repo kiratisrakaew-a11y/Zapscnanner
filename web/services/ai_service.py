@@ -19,7 +19,10 @@ class AIService:
             finding.ai_available = False
             return finding
         from openai import OpenAI
-        client = OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url or None)
+        base_url = self.settings.openai_base_url or None
+        if base_url and not base_url.startswith(("http://", "https://")):
+            base_url = "https://" + base_url  # tolerate a base_url configured without a scheme
+        client = OpenAI(api_key=self.settings.openai_api_key, base_url=base_url)
         prompt = "อธิบาย ZAP finding ที่ให้เท่านั้นเป็นภาษาไทย ห้ามสร้าง finding หรือเปลี่ยน severity ตอบเป็น JSON object: plain_language_title, plain_language_summary, business_impact, recommended_action, owasp_category.\n" + finding.model_dump_json()
         try:
             response = client.chat.completions.create(model=self.settings.openai_model, messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"})

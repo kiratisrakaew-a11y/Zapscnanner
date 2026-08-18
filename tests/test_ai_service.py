@@ -40,6 +40,24 @@ def test_enrich_uses_openai(monkeypatch):
     assert finding.owasp_category == "A05: Security Misconfiguration"
 
 
+def test_base_url_without_scheme_gets_https(monkeypatch):
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            msg = types.SimpleNamespace(content=json.dumps({"business_impact": "x"}))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = types.SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    AIService(Settings(openai_api_key="x", openai_base_url="gen.ai.kku.ac.th/okmd/api/v1")).enrich(_finding())
+    assert captured["base_url"] == "https://gen.ai.kku.ac.th/okmd/api/v1"
+
+
 def test_enriched_findings_dedup_by_name(monkeypatch):
     findings = [Finding(alert_id=str(i), name=("A" if i % 2 == 0 else "B"), risk="Low", url="u") for i in range(10)]
 
