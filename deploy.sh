@@ -83,10 +83,25 @@ gcloud secrets add-iam-policy-binding "$GEMINI_SECRET" \
   --member="serviceAccount:${WEB_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
 
 # --- 7. build images --------------------------------------------------------
+# gcloud builds submit --tag builds only the default "Dockerfile"; to build a
+# named Dockerfile we submit a generated Cloud Build config whose docker step
+# takes -f.
+build_image() {           # $1=Dockerfile  $2=image
+  local cfg; cfg="$(mktemp)"
+  cat >"$cfg" <<EOF
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "$1", "-t", "$2", "."]
+images:
+  - "$2"
+EOF
+  gcloud builds submit --config "$cfg" .
+  rm -f "$cfg"
+}
 log "Build web image"
-gcloud builds submit --tag "$WEB_IMAGE" -f Dockerfile.web .
+build_image Dockerfile.web "$WEB_IMAGE"
 log "Build scanner image"
-gcloud builds submit --tag "$SCANNER_IMAGE" -f Dockerfile.scanner .
+build_image Dockerfile.scanner "$SCANNER_IMAGE"
 
 # --- 8. deploy scanner Job (ก่อน web) ---------------------------------------
 log "Deploy scanner Cloud Run Job"
