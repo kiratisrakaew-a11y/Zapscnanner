@@ -1,0 +1,8 @@
+FROM zaproxy/zap-stable:2.16.1
+USER root
+RUN pip install --no-cache-dir google-cloud-firestore==2.21.0
+COPY scanner /app/scanner
+ENV PYTHONPATH=/app
+USER zap
+ENTRYPOINT ["python3","/app/scanner/run_scan.py"]
+
