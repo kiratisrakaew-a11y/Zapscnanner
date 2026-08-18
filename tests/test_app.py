@@ -21,7 +21,10 @@ def test_create_and_get_scan():
 
 def test_findings_enrichment_wired():
     with TestClient(app) as client:
-        app.state.ai.enrich=lambda finding: finding.model_copy(update={"plain_language_title":"AI-WIRED","ai_available":True})
+        def fake_enrich(finding):
+            finding.plain_language_title="AI-WIRED"; finding.business_impact="AI-IMPACT"; finding.ai_available=True
+            return finding
+        app.state.ai.enrich=fake_enrich
         response=client.post("/api/scans",headers={"X-Session-ID":"test-ai"},json={"target_url":"https://example.com","scan_type":"quick","authorization_confirmed":True})
         assert response.status_code==202
         scan_id=response.json()["scan_id"]

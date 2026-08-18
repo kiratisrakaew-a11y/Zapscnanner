@@ -9,19 +9,42 @@ router = APIRouter(prefix="/api/scans", tags=["scans"])
 def state(request: Request): return request.app.state
 
 
-def enriched_findings(app, scan_id: str):
-    """Return findings, running AI enrichment on any not yet enriched.
+AI_FIELDS = ("plain_language_title", "plain_language_summary", "business_impact", "recommended_action", "owasp_category")
 
-    Results are cached back to the store only when an OpenAI key is configured,
-    so the model is called at most once per finding rather than on every poll.
-    Without a key, AIService.enrich fills presentation fields from ZAP fields
-    (fallback) without any API call or persistence.
+
+def enriched_findings(app, scan_id: str):
+    """Return findings with AI enrichment applied to any not yet enriched.
+
+    The AI explanation depends on the alert type (name), not the specific URL,
+    so the model is called at most once per distinct finding name and the result
+    is reused across duplicates — a scan with hundreds of same-named alerts costs
+    only a handful of calls. A per-request cap bounds the work so a single page
+    load never blocks on an unbounded number of calls; remaining findings are
+    enriched on later loads. Results are cached back to the store when an OpenAI
+    key is configured. Without a key, enrich fills ZAP fallback fields with no
+    API call or persistence.
     """
     findings = app.store.get_findings(scan_id)
-    if any(not f.ai_available for f in findings):
-        findings = [f if f.ai_available else app.ai.enrich(f) for f in findings]
-        if app.settings.openai_api_key:
-            app.store.save_findings(scan_id, findings)
+    pending = [f for f in findings if not f.ai_available]
+    if not pending:
+        return findings
+    if not app.settings.openai_api_key:
+        for f in pending:
+            app.ai.enrich(f)  # cheap ZAP fallback, no API call, no persistence
+        return findings
+    by_name: dict[str, dict] = {}
+    calls = 0
+    for f in pending:
+        if f.name in by_name:
+            for key, value in by_name[f.name].items():
+                setattr(f, key, value)
+            f.ai_available = True
+        elif calls < app.settings.ai_enrich_per_request:
+            app.ai.enrich(f)
+            calls += 1
+            if f.ai_available:
+                by_name[f.name] = {key: getattr(f, key) for key in AI_FIELDS}
+    app.store.save_findings(scan_id, findings)
     return findings
 
 @router.post("", status_code=202)

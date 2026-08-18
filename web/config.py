@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = ""
+    ai_enrich_per_request: int = 20
     max_active_scans: int = 3
     scan_token_secret: str = "development-only"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
