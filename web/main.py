@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from web.api import health, scans
-from web.api.scans import enriched_findings
 from web.config import get_settings
 from web.services.ai_service import AIService
 from web.services.firestore_service import FirestoreStore, MemoryStore
@@ -36,7 +35,10 @@ def scanning(request: Request, scan_id: str): return templates.TemplateResponse(
 def result(request: Request, scan_id: str):
     scan = request.app.state.store.get_scan(scan_id)
     if not scan: raise HTTPException(404, "ไม่พบ Scan")
-    return templates.TemplateResponse(request, "result.html", {"scan": scan, "findings": enriched_findings(request.app.state, scan_id)})
+    # Render immediately from the store; AI enrichment happens asynchronously via
+    # the findings API (a small script in result.html triggers it) so the page
+    # never blocks on the model.
+    return templates.TemplateResponse(request, "result.html", {"scan": scan, "findings": request.app.state.store.get_findings(scan_id)})
 
 @app.get("/history", response_class=HTMLResponse)
 def history(request: Request): return templates.TemplateResponse(request, "history.html", {"scans": request.app.state.store.list_scans()})

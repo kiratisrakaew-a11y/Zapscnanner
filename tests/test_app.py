@@ -38,3 +38,11 @@ def test_findings_enrichment_wired():
         assert findings[0]["plain_language_title"]=="AI-WIRED"
         assert findings[0]["ai_available"] is True
 
+def test_result_page_renders():
+    with TestClient(app) as client:
+        response=client.post("/api/scans",headers={"X-Session-ID":"test-r"},json={"target_url":"https://example.com","scan_type":"quick","authorization_confirmed":True})
+        scan_id=response.json()["scan_id"]
+        page=client.get(f"/scans/{scan_id}/result")
+        assert page.status_code==200
+        assert "SCAN-" in page.text or scan_id in page.text
+
