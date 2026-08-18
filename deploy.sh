@@ -3,7 +3,7 @@
 # deploy.sh — Deploy Aegis (ZAP Security Scanner) to Google Cloud Run.
 #
 # Deploys the FastAPI web service + the ZAP scanner Cloud Run Job, backed by
-# Firestore, with the Gemini API key stored in Secret Manager. Idempotent:
+# Firestore, with the OpenAI API key stored in Secret Manager. Idempotent:
 # re-running skips resources that already exist and rolls out new revisions.
 #
 # Run this on a machine where `gcloud` is installed and authenticated
@@ -11,28 +11,30 @@
 #
 # Usage:
 #   export PROJECT_ID=your-project-id
-#   export GEMINI_API_KEY=your-gemini-key      # required (Gemini enabled)
+#   export OPENAI_API_KEY=your-openai-key      # required (AI enrichment enabled)
 #   ./deploy.sh
 #
 # Optional overrides:
-#   REGION=asia-southeast1  REPOSITORY=aegis  VERSION=1.0.0  GEMINI_MODEL=gemini-2.5-flash
+#   REGION=asia-southeast1  REPOSITORY=aegis  VERSION=1.0.0
+#   OPENAI_MODEL=gpt-4o-mini  OPENAI_BASE_URL=      # base_url for OpenAI-compatible endpoints
 
 set -euo pipefail
 
 # --- configuration ----------------------------------------------------------
 : "${PROJECT_ID:?ต้องตั้ง PROJECT_ID เช่น: export PROJECT_ID=my-project}"
-: "${GEMINI_API_KEY:?ต้องตั้ง GEMINI_API_KEY สำหรับเปิดใช้ Gemini เช่น: export GEMINI_API_KEY=xxxx}"
+: "${OPENAI_API_KEY:?ต้องตั้ง OPENAI_API_KEY สำหรับเปิดใช้ AI เช่น: export OPENAI_API_KEY=sk-...}"
 REGION="${REGION:-asia-southeast1}"
 REPOSITORY="${REPOSITORY:-aegis}"
 VERSION="${VERSION:-1.0.0}"
-GEMINI_MODEL="${GEMINI_MODEL:-gemini-2.5-flash}"
+OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
+OPENAI_BASE_URL="${OPENAI_BASE_URL:-}"
 
 WEB_SA="aegis-web@${PROJECT_ID}.iam.gserviceaccount.com"
 SCANNER_SA="aegis-scanner@${PROJECT_ID}.iam.gserviceaccount.com"
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
 WEB_IMAGE="${REGISTRY}/web:${VERSION}"
 SCANNER_IMAGE="${REGISTRY}/scanner:${VERSION}"
-GEMINI_SECRET="gemini-api-key"
+OPENAI_SECRET="openai-api-key"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
@@ -72,14 +74,14 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${WEB_SA}"     --role="roles/run.developer"  --condition=None >/dev/null
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SCANNER_SA}" --role="roles/datastore.user" --condition=None >/dev/null
 
-# --- 6. Gemini secret (Secret Manager) --------------------------------------
-log "เก็บ GEMINI_API_KEY ใน Secret Manager"
-if gcloud secrets describe "$GEMINI_SECRET" >/dev/null 2>&1; then
-  printf '%s' "$GEMINI_API_KEY" | gcloud secrets versions add "$GEMINI_SECRET" --data-file=-
+# --- 6. OpenAI secret (Secret Manager) --------------------------------------
+log "เก็บ OPENAI_API_KEY ใน Secret Manager"
+if gcloud secrets describe "$OPENAI_SECRET" >/dev/null 2>&1; then
+  printf '%s' "$OPENAI_API_KEY" | gcloud secrets versions add "$OPENAI_SECRET" --data-file=-
 else
-  printf '%s' "$GEMINI_API_KEY" | gcloud secrets create "$GEMINI_SECRET" --replication-policy=automatic --data-file=-
+  printf '%s' "$OPENAI_API_KEY" | gcloud secrets create "$OPENAI_SECRET" --replication-policy=automatic --data-file=-
 fi
-gcloud secrets add-iam-policy-binding "$GEMINI_SECRET" \
+gcloud secrets add-iam-policy-binding "$OPENAI_SECRET" \
   --member="serviceAccount:${WEB_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
 
 # --- 7. build images --------------------------------------------------------
@@ -115,8 +117,8 @@ log "Deploy web Cloud Run Service"
 gcloud run deploy aegis-web \
   --image "$WEB_IMAGE" --region "$REGION" --service-account "$WEB_SA" \
   --allow-unauthenticated --cpu 1 --memory 512Mi --min 0 --max 5 --concurrency 40 \
-  --set-env-vars "APP_ENV=production,STORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CLOUD_RUN_REGION=${REGION},SCANNER_JOB_NAME=zap-scanner,MAX_ACTIVE_SCANS=3,GEMINI_MODEL=${GEMINI_MODEL}" \
-  --set-secrets "GEMINI_API_KEY=${GEMINI_SECRET}:latest"
+  --set-env-vars "APP_ENV=production,STORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CLOUD_RUN_REGION=${REGION},SCANNER_JOB_NAME=zap-scanner,MAX_ACTIVE_SCANS=3,OPENAI_MODEL=${OPENAI_MODEL},OPENAI_BASE_URL=${OPENAI_BASE_URL}" \
+  --set-secrets "OPENAI_API_KEY=${OPENAI_SECRET}:latest"
 
 # --- 10. post-deploy --------------------------------------------------------
 URL="$(gcloud run services describe aegis-web --region "$REGION" --format='value(status.url)')"

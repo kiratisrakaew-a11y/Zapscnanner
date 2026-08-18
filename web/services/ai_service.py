@@ -11,23 +11,23 @@ class AIService:
 
     def enrich(self, finding: Finding) -> Finding:
         """Interpret a ZAP finding only; never creates or changes findings/severity."""
-        if not self.settings.gemini_api_key:
-            logger.warning("GEMINI_API_KEY not configured; using ZAP fallback for %s", finding.alert_id)
+        if not self.settings.openai_api_key:
+            logger.warning("OPENAI_API_KEY not configured; using ZAP fallback for %s", finding.alert_id)
             finding.plain_language_title = finding.plain_language_title or finding.name
             finding.plain_language_summary = finding.plain_language_summary or finding.zap_description
             finding.recommended_action = finding.recommended_action or finding.zap_solution
             finding.ai_available = False
             return finding
-        from google import genai
-        client = genai.Client(api_key=self.settings.gemini_api_key)
-        prompt = "อธิบาย ZAP finding ที่ให้เท่านั้นเป็นภาษาไทย ห้ามสร้าง finding หรือเปลี่ยน severity ตอบ JSON: plain_language_title, plain_language_summary, business_impact, recommended_action, owasp_category.\n" + finding.model_dump_json()
+        from openai import OpenAI
+        client = OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url or None)
+        prompt = "อธิบาย ZAP finding ที่ให้เท่านั้นเป็นภาษาไทย ห้ามสร้าง finding หรือเปลี่ยน severity ตอบเป็น JSON object: plain_language_title, plain_language_summary, business_impact, recommended_action, owasp_category.\n" + finding.model_dump_json()
         try:
-            response = client.models.generate_content(model=self.settings.gemini_model, contents=prompt, config={"response_mime_type": "application/json"})
-            data = json.loads(response.text)
+            response = client.chat.completions.create(model=self.settings.openai_model, messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"})
+            data = json.loads(response.choices[0].message.content)
             for field in data:
                 if field in {"plain_language_title", "plain_language_summary", "business_impact", "recommended_action", "owasp_category"}: setattr(finding, field, data[field])
             finding.ai_available = True
         except Exception:
-            logger.exception("Gemini enrichment failed for %s (model=%s)", finding.alert_id, self.settings.gemini_model)
+            logger.exception("OpenAI enrichment failed for %s (model=%s)", finding.alert_id, self.settings.openai_model)
             finding.ai_available = False
         return finding

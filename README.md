@@ -38,7 +38,7 @@ Production flow ไม่ให้ Web Service รอ scan: API บันทึ�
 
 ## Configuration
 
-ดูค่าทั้งหมดใน `.env.example` ห้าม commit `.env` หรือ service-account key. Production ต้องตั้ง `APP_ENV=production`, `STORE_BACKEND=firestore`, project/region/job และ random `SCAN_TOKEN_SECRET` ผ่าน Secret Manager หรือ Cloud Run environment variables. `GEMINI_API_KEY` เป็น optional; หาก AI ล้มเหลวผล ZAP ยังต้องแสดงได้
+ดูค่าทั้งหมดใน `.env.example` ห้าม commit `.env` หรือ service-account key. Production ต้องตั้ง `APP_ENV=production`, `STORE_BACKEND=firestore`, project/region/job และ random `SCAN_TOKEN_SECRET` ผ่าน Secret Manager หรือ Cloud Run environment variables. `OPENAI_API_KEY` เป็น optional (ตั้ง `OPENAI_MODEL`, และ `OPENAI_BASE_URL` สำหรับ endpoint ที่เข้ากันได้กับ OpenAI); หาก AI ล้มเหลวผล ZAP ยังต้องแสดงได้
 
 ## API
 

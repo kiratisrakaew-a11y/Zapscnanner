@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     firestore_database: str = "(default)"
     cloud_run_region: str = "asia-southeast1"
     scanner_job_name: str = "zap-scanner"
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = ""
     max_active_scans: int = 3
     scan_token_secret: str = "development-only"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

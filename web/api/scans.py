@@ -10,17 +10,17 @@ def state(request: Request): return request.app.state
 
 
 def enriched_findings(app, scan_id: str):
-    """Return findings, running Gemini enrichment on any not yet enriched.
+    """Return findings, running AI enrichment on any not yet enriched.
 
-    Results are cached back to the store only when a Gemini key is configured,
-    so Gemini is called at most once per finding rather than on every poll.
+    Results are cached back to the store only when an OpenAI key is configured,
+    so the model is called at most once per finding rather than on every poll.
     Without a key, AIService.enrich fills presentation fields from ZAP fields
     (fallback) without any API call or persistence.
     """
     findings = app.store.get_findings(scan_id)
     if any(not f.ai_available for f in findings):
         findings = [f if f.ai_available else app.ai.enrich(f) for f in findings]
-        if app.settings.gemini_api_key:
+        if app.settings.openai_api_key:
             app.store.save_findings(scan_id, findings)
     return findings
 
