@@ -40,6 +40,24 @@ def test_enrich_uses_openai(monkeypatch):
     assert finding.owasp_category == "A05: Security Misconfiguration"
 
 
+def test_summarize_no_key_returns_empty():
+    assert AIService(Settings(openai_api_key=None)).summarize("https://x", {"high": 0}, ["A"]) == ""
+
+
+def test_summarize_uses_openai(monkeypatch):
+    class FakeCompletions:
+        def create(self, **kwargs):
+            msg = types.SimpleNamespace(content=json.dumps({"executive_summary": "สรุปภาษาไทย"}))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs): self.chat = types.SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    out = AIService(Settings(openai_api_key="x")).summarize("https://x", {"high": 1}, ["A", "B"])
+    assert out == "สรุปภาษาไทย"
+
+
 def test_base_url_without_scheme_gets_https(monkeypatch):
     captured = {}
 

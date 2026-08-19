@@ -46,3 +46,13 @@ def test_result_page_renders():
         assert page.status_code==200
         assert "SCAN-" in page.text or scan_id in page.text
 
+def test_summary_endpoint():
+    with TestClient(app) as client:
+        response=client.post("/api/scans",headers={"X-Session-ID":"test-s"},json={"target_url":"https://example.com","scan_type":"quick","authorization_confirmed":True})
+        scan_id=response.json()["scan_id"]
+        for _ in range(200):
+            if client.get(f"/api/scans/{scan_id}").json()["status"]=="COMPLETED": break
+            time.sleep(0.02)
+        data=client.get(f"/api/scans/{scan_id}/summary").json()
+        assert "executive_summary" in data
+

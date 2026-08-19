@@ -84,6 +84,19 @@ def findings(scan_id: str, app=Depends(state)):
     if not app.store.get_scan(scan_id): raise HTTPException(404, "ไม่พบ Scan")
     return enriched_findings(app, scan_id)
 
+@router.get("/{scan_id}/summary")
+def summary(scan_id: str, app=Depends(state)):
+    scan = app.store.get_scan(scan_id)
+    if not scan: raise HTTPException(404, "ไม่พบ Scan")
+    if not scan.executive_summary and app.settings.openai_api_key:
+        findings = app.store.get_findings(scan_id)
+        counts = {"high": scan.high, "medium": scan.medium, "low": scan.low, "info": scan.info}
+        text = app.ai.summarize(scan.target, counts, sorted({f.name for f in findings}))
+        if text:
+            scan.executive_summary = text
+            app.store.update_scan(scan)
+    return {"executive_summary": scan.executive_summary or ""}
+
 @router.post("/{scan_id}/cancel")
 def cancel(scan_id: str, app=Depends(state)):
     scan = app.store.get_scan(scan_id)
