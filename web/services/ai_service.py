@@ -15,7 +15,7 @@ class AIService:
         if base_url and not base_url.startswith(("http://", "https://")):
             base_url = "https://" + base_url  # tolerate a base_url configured without a scheme
         # Fail fast so a broken endpoint/key surfaces quickly instead of hanging on retries.
-        return OpenAI(api_key=self.settings.openai_api_key, base_url=base_url, max_retries=0, timeout=20)
+        return OpenAI(api_key=self.settings.openai_api_key, base_url=base_url, max_retries=0, timeout=15)
 
     def enrich(self, finding: Finding) -> Finding:
         """Interpret a ZAP finding only; never creates or changes findings/severity."""

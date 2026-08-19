@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,18 +33,22 @@ def enriched_findings(app, scan_id: str):
         for f in pending:
             app.ai.enrich(f)  # cheap ZAP fallback, no API call, no persistence
         return findings
-    by_name: dict[str, dict] = {}
-    calls = 0
+    # One representative per distinct name, bounded by the per-request cap, enriched
+    # concurrently — enrich is I/O-bound (a network call), so threads cut the wall time.
+    seen: set[str] = set()
+    reps = []
     for f in pending:
-        if f.name in by_name:
+        if f.name not in seen and len(reps) < app.settings.ai_enrich_per_request:
+            seen.add(f.name)
+            reps.append(f)
+    with ThreadPoolExecutor(max_workers=min(8, len(reps))) as pool:
+        list(pool.map(app.ai.enrich, reps))  # enrich mutates each finding in place
+    by_name = {f.name: {key: getattr(f, key) for key in AI_FIELDS} for f in reps if f.ai_available}
+    for f in findings:
+        if not f.ai_available and f.name in by_name:
             for key, value in by_name[f.name].items():
                 setattr(f, key, value)
             f.ai_available = True
-        elif calls < app.settings.ai_enrich_per_request:
-            app.ai.enrich(f)
-            calls += 1
-            if f.ai_available:
-                by_name[f.name] = {key: getattr(f, key) for key in AI_FIELDS}
     app.store.save_findings(scan_id, findings)
     return findings
 
