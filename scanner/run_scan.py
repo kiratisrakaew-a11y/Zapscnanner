@@ -42,6 +42,15 @@ def main() -> int:
         counts=count_by_severity(findings)
         score=max(0,100-counts["high"]*20-counts["medium"]*8-counts["low"]*2); risk="HIGH" if counts["high"] else "MEDIUM" if counts["medium"] else "LOW" if counts["low"] else "INFORMATIONAL"
         update(ref,status="COMPLETED",progress=100,phase="ประเมินเสร็จสมบูรณ์",finished_at=datetime.now(timezone.utc).isoformat(),security_score=score,overall_risk=risk,**counts)
+        try:
+            email=(ref.get().to_dict() or {}).get("notify_email")
+            if email and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"):
+                from scanner import emailer
+                followup=emailer.business_days_from(datetime.now(timezone.utc).date(),5)
+                subject,html,text=emailer.build_message(target,score,risk,counts,findings,followup)
+                emailer.send(os.getenv("SMTP_HOST","smtp.gmail.com"),os.getenv("SMTP_PORT","587"),os.getenv("SMTP_USER"),os.getenv("SMTP_PASSWORD"),os.getenv("SMTP_FROM") or os.getenv("SMTP_USER"),email,subject,html,text,emailer.build_ics(target,followup))
+        except Exception as exc:
+            print(f"email send failed: {exc}",file=sys.stderr)
         return 0
     except subprocess.TimeoutExpired: update(ref,status="FAILED",error_code="SCAN_TIMEOUT",error_message="การประเมินใช้เวลานานเกินกำหนด"); return 1
     except Exception as exc: update(ref,status="FAILED",error_code="SCANNER_FAILED",error_message="Scanner ไม่สามารถทำงานจนเสร็จได้"); print(str(exc),file=sys.stderr); return 1

@@ -56,3 +56,11 @@ def test_summary_endpoint():
         data=client.get(f"/api/scans/{scan_id}/summary").json()
         assert "executive_summary" in data
 
+def test_notify_email_stored_and_validated():
+    with TestClient(app) as client:
+        r=client.post("/api/scans",headers={"X-Session-ID":"em1"},json={"target_url":"https://example.com","scan_type":"quick","authorization_confirmed":True,"notify_email":"a@b.com"})
+        assert r.status_code==202
+        assert client.get(f"/api/scans/{r.json()['scan_id']}").json()["notify_email"]=="a@b.com"
+        bad=client.post("/api/scans",headers={"X-Session-ID":"em2"},json={"target_url":"https://example.com","scan_type":"quick","authorization_confirmed":True,"notify_email":"not-an-email"})
+        assert bad.status_code==400
+

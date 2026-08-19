@@ -1,3 +1,4 @@
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -64,8 +65,11 @@ async def create_scan(payload: ScanCreate, request: Request, app=Depends(state))
         raise HTTPException(429, "ระบบมีงานเต็ม กรุณาลองใหม่ภายหลัง")
     try: await validate_target(str(payload.target_url), resolve_dns=app.settings.app_env != "test")
     except UnsafeTarget as exc: raise HTTPException(400, str(exc)) from exc
+    notify_email = (payload.notify_email or "").strip() or None
+    if notify_email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", notify_email):
+        raise HTTPException(400, "อีเมลไม่ถูกต้อง")
     scan_id = "SCAN-" + uuid4().hex[:8].upper()
-    scan = Scan(scan_id=scan_id, target=str(payload.target_url), scan_type=payload.scan_type, session_id=session_id)
+    scan = Scan(scan_id=scan_id, target=str(payload.target_url), scan_type=payload.scan_type, session_id=session_id, notify_email=notify_email)
     audit = {"scan_id": scan_id, "target": scan.target, "authorization_confirmed": True, "timestamp": datetime.now(timezone.utc).isoformat(), "session_identifier": session_id}
     app.store.create_scan(scan, audit)
     try: await app.scanner.dispatch(scan)

@@ -28,6 +28,13 @@ REPOSITORY="${REPOSITORY:-aegis}"
 VERSION="${VERSION:-1.0.0}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
 OPENAI_BASE_URL="${OPENAI_BASE_URL:-}"
+# Email report (optional): set SMTP_USER + SMTP_PASSWORD (Gmail App Password) to enable
+SMTP_USER="${SMTP_USER:-}"
+SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
+SMTP_PORT="${SMTP_PORT:-587}"
+SMTP_FROM="${SMTP_FROM:-$SMTP_USER}"
+SMTP_SECRET="smtp-password"
 
 WEB_SA="aegis-web@${PROJECT_ID}.iam.gserviceaccount.com"
 SCANNER_SA="aegis-scanner@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -84,6 +91,18 @@ fi
 gcloud secrets add-iam-policy-binding "$OPENAI_SECRET" \
   --member="serviceAccount:${WEB_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
 
+# --- 6b. SMTP secret (optional email report) --------------------------------
+if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
+  log "เก็บ SMTP_PASSWORD ใน Secret Manager (เปิดใช้ email report)"
+  if gcloud secrets describe "$SMTP_SECRET" >/dev/null 2>&1; then
+    printf '%s' "$SMTP_PASSWORD" | gcloud secrets versions add "$SMTP_SECRET" --data-file=-
+  else
+    printf '%s' "$SMTP_PASSWORD" | gcloud secrets create "$SMTP_SECRET" --replication-policy=automatic --data-file=-
+  fi
+  gcloud secrets add-iam-policy-binding "$SMTP_SECRET" \
+    --member="serviceAccount:${SCANNER_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
+fi
+
 # --- 7. build images --------------------------------------------------------
 # gcloud builds submit --tag builds only the default "Dockerfile"; to build a
 # named Dockerfile we submit a generated Cloud Build config whose docker step
@@ -107,10 +126,16 @@ build_image Dockerfile.scanner "$SCANNER_IMAGE"
 
 # --- 8. deploy scanner Job (ก่อน web) ---------------------------------------
 log "Deploy scanner Cloud Run Job"
+SCANNER_ENV="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SCAN_TIMEOUT_SECONDS=1800"
+SCANNER_SECRET_ARGS=()
+if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
+  SCANNER_ENV="${SCANNER_ENV},SMTP_HOST=${SMTP_HOST},SMTP_PORT=${SMTP_PORT},SMTP_USER=${SMTP_USER},SMTP_FROM=${SMTP_FROM}"
+  SCANNER_SECRET_ARGS=(--set-secrets "SMTP_PASSWORD=${SMTP_SECRET}:latest")
+fi
 gcloud run jobs deploy zap-scanner \
   --image "$SCANNER_IMAGE" --region "$REGION" --service-account "$SCANNER_SA" \
   --cpu 2 --memory 4Gi --task-timeout 30m --max-retries 0 \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SCAN_TIMEOUT_SECONDS=1800"
+  --set-env-vars "$SCANNER_ENV" "${SCANNER_SECRET_ARGS[@]}"
 
 # --- 9. deploy web Service --------------------------------------------------
 log "Deploy web Cloud Run Service"

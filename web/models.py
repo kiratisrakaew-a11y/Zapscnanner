@@ -23,6 +23,7 @@ class ScanCreate(BaseModel):
     target_url: HttpUrl
     scan_type: str = Field(pattern="^(quick|standard)$")
     authorization_confirmed: bool
+    notify_email: str | None = None
 
 
 class Finding(BaseModel):
@@ -50,6 +51,7 @@ class Scan(BaseModel):
     target: str
     scan_type: str
     session_id: str = "unknown"
+    notify_email: str | None = None
     status: ScanStatus = ScanStatus.QUEUED
     created_at: str = Field(default_factory=now_iso)
     started_at: str | None = None
