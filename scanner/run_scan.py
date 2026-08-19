@@ -9,6 +9,21 @@ from scanner.parse_report import parse_report
 
 def update(ref, **values): ref.set({**values,"updated_at":datetime.now(timezone.utc).isoformat()}, merge=True)
 
+SEVERITIES = ("high", "medium", "low", "info")
+
+def _bucket(risk):
+    r = (risk or "").lower()
+    return "high" if r.startswith("high") else "medium" if r.startswith("medium") else "low" if r.startswith("low") else "info"
+
+def dedupe(findings):
+    """One entry per alert_id, matching what is stored (batch.set overwrites by id)."""
+    return list({f["alert_id"]: f for f in findings}.values())
+
+def count_by_severity(findings):
+    counts = {k: 0 for k in SEVERITIES}
+    for f in findings: counts[_bucket(f["risk"])] += 1
+    return counts
+
 def main() -> int:
     scan_id, target, scan_type = os.environ["SCAN_ID"], os.environ["TARGET_URL"], os.getenv("SCAN_TYPE", "quick")
     client=firestore.Client(project=os.getenv("GOOGLE_CLOUD_PROJECT")); ref=client.collection("scans").document(scan_id)
@@ -19,9 +34,12 @@ def main() -> int:
         result=subprocess.run(["zap.sh","-cmd","-autorun",str(plan)],env=env,timeout=int(os.getenv("SCAN_TIMEOUT_SECONDS","1800")),check=False)
         if result.returncode not in {0,1,2}: raise RuntimeError(f"ZAP exited with code {result.returncode}")
         update(ref,status="ANALYZING",progress=90,phase="แปลงผลรายงาน")
-        findings=parse_report(report); batch=client.batch(); alerts=ref.collection("alerts")
-        for item in findings: batch.set(alerts.document(item["alert_id"]),item)
-        batch.commit(); counts={k:sum(1 for f in findings if f["risk"].lower()==k) for k in ("high","medium","low","info")}
+        findings=dedupe(parse_report(report)); alerts=ref.collection("alerts")
+        for i in range(0, len(findings), 450):          # chunk to stay under Firestore's 500-write batch limit
+            batch=client.batch()
+            for item in findings[i:i+450]: batch.set(alerts.document(item["alert_id"]),item)
+            batch.commit()
+        counts=count_by_severity(findings)
         score=max(0,100-counts["high"]*20-counts["medium"]*8-counts["low"]*2); risk="HIGH" if counts["high"] else "MEDIUM" if counts["medium"] else "LOW" if counts["low"] else "INFORMATIONAL"
         update(ref,status="COMPLETED",progress=100,phase="ประเมินเสร็จสมบูรณ์",finished_at=datetime.now(timezone.utc).isoformat(),security_score=score,overall_risk=risk,**counts)
         return 0
