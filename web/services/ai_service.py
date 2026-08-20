@@ -11,11 +11,15 @@ class AIService:
 
     def _client(self):
         from openai import OpenAI
-        base_url = self.settings.openai_base_url or None
+        base_url = (self.settings.openai_base_url or "").strip()
         if base_url and not base_url.startswith(("http://", "https://")):
             base_url = "https://" + base_url  # tolerate a base_url configured without a scheme
+        # Always pass an explicit, scheme-qualified base_url. When base_url is None the OpenAI
+        # SDK falls back to the OPENAI_BASE_URL env var, and Cloud Run sets that var to an empty
+        # string, which the SDK would use verbatim as the request host — a scheme-less URL that
+        # fails with httpx UnsupportedProtocol. Default to OpenAI's own endpoint.
         # Fail fast so a broken endpoint/key surfaces quickly instead of hanging on retries.
-        return OpenAI(api_key=self.settings.openai_api_key, base_url=base_url, max_retries=0, timeout=15)
+        return OpenAI(api_key=self.settings.openai_api_key, base_url=base_url or "https://api.openai.com/v1", max_retries=0, timeout=15)
 
     def enrich(self, finding: Finding) -> Finding:
         """Interpret a ZAP finding only; never creates or changes findings/severity."""

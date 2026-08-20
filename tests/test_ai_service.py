@@ -76,6 +76,23 @@ def test_base_url_without_scheme_gets_https(monkeypatch):
     assert captured["base_url"] == "https://gen.ai.kku.ac.th/okmd/api/v1"
 
 
+def test_empty_base_url_defaults_to_openai_scheme(monkeypatch):
+    # Cloud Run sets OPENAI_BASE_URL="" (empty); the SDK would otherwise read that env var and use a
+    # scheme-less base_url. _client() must always pass an explicit, scheme-qualified base_url.
+    monkeypatch.setenv("OPENAI_BASE_URL", "")
+    captured = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = types.SimpleNamespace(completions=None)
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    AIService(Settings(openai_api_key="x", openai_base_url=""))._client()
+    assert captured["base_url"].startswith("https://")
+    assert captured["base_url"] == "https://api.openai.com/v1"
+
+
 def test_enriched_findings_dedup_by_name(monkeypatch):
     findings = [Finding(alert_id=str(i), name=("A" if i % 2 == 0 else "B"), risk="Low", url="u") for i in range(10)]
 

@@ -139,10 +139,14 @@ gcloud run jobs deploy zap-scanner \
 
 # --- 9. deploy web Service --------------------------------------------------
 log "Deploy web Cloud Run Service"
+# Only set OPENAI_BASE_URL when non-empty. Setting it to "" makes the OpenAI SDK
+# use an empty (scheme-less) base URL, which fails with UnsupportedProtocol.
+WEB_ENV="APP_ENV=production,STORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CLOUD_RUN_REGION=${REGION},SCANNER_JOB_NAME=zap-scanner,MAX_ACTIVE_SCANS=3,OPENAI_MODEL=${OPENAI_MODEL}"
+if [ -n "$OPENAI_BASE_URL" ]; then WEB_ENV="${WEB_ENV},OPENAI_BASE_URL=${OPENAI_BASE_URL}"; fi
 gcloud run deploy aegis-web \
   --image "$WEB_IMAGE" --region "$REGION" --service-account "$WEB_SA" \
   --allow-unauthenticated --cpu 1 --memory 512Mi --min 0 --max 5 --concurrency 40 \
-  --set-env-vars "APP_ENV=production,STORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CLOUD_RUN_REGION=${REGION},SCANNER_JOB_NAME=zap-scanner,MAX_ACTIVE_SCANS=3,OPENAI_MODEL=${OPENAI_MODEL},OPENAI_BASE_URL=${OPENAI_BASE_URL}" \
+  --set-env-vars "$WEB_ENV" \
   --set-secrets "OPENAI_API_KEY=${OPENAI_SECRET}:latest"
 
 # --- 10. post-deploy --------------------------------------------------------
