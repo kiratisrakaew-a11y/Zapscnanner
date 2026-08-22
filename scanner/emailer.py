@@ -24,6 +24,23 @@ def build_message(target, score, risk, counts, findings, followup):
         f"<td>{escape(str(f.get('url', '')))}</td><td>{escape(str(f.get('zap_solution', '')))}</td></tr>"
         for f in findings
     )
+    # AI fix prompts (High/Medium only) — ready to paste into the user's AI coding assistant.
+    fixes = [f for f in findings
+             if (f.get("risk") or "").lower().startswith(("high", "medium")) and f.get("fix_prompt")]
+    fix_html = fix_text = ""
+    if fixes:
+        blocks = "".join(
+            f'<div style="margin:14px 0"><b>{escape(str(f.get("name", "")))}</b> '
+            f'<span style="color:#888">({escape(str(f.get("risk", "")))})</span>'
+            f'<pre style="white-space:pre-wrap;word-break:break-word;background:#0f151d;color:#e6edf3;'
+            f'padding:12px;border-radius:8px;font-size:13px;margin:6px 0 0">{escape(str(f.get("fix_prompt", "")))}</pre></div>'
+            for f in fixes)
+        fix_html = ('<h3>🛠️ คำแนะนำแก้ไข (คัดลอกไปสั่ง AI ที่คุณใช้พัฒนา)</h3>'
+                    '<p style="color:#555;font-size:13px">คัดลอกข้อความด้านล่างไปวางใน AI coding assistant '
+                    '(เช่น Cursor/Copilot) เพื่อช่วยแก้ช่องโหว่ระดับ High/Medium</p>' + blocks)
+        fix_text = ("\n\nคำแนะนำแก้ไข (คัดลอกไปสั่ง AI ที่คุณใช้พัฒนา):\n" +
+                    "\n\n".join(f"- {f.get('name', '')} ({f.get('risk', '')}):\n{f.get('fix_prompt', '')}"
+                                for f in fixes))
     html = (
         '<div style="font-family:Arial,sans-serif;color:#111">'
         "<h2>ผลการประเมินความปลอดภัย</h2>"
@@ -36,12 +53,13 @@ def build_message(target, score, risk, counts, findings, followup):
         '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:13px">'
         '<tr style="background:#f0f0f0"><th>Risk</th><th>Finding</th><th>URL</th><th>คำแนะนำ</th></tr>'
         f"{rows}</table>"
+        + fix_html +
         '<p style="color:#888;font-size:12px">รายงานนี้อ้างอิงผลจาก OWASP ZAP ในการประเมินครั้งนี้เท่านั้น</p></div>'
     )
     text = (f"ผลการประเมิน {target}\nSecurity Score {score}/100 ({risk})\n"
             f"High {counts.get('high', 0)} Medium {counts.get('medium', 0)} "
             f"Low {counts.get('low', 0)} Info {counts.get('info', 0)}\n\n"
-            f"นัดหมาย: {appt}\n\nจำนวน Finding: {len(findings)}")
+            f"นัดหมาย: {appt}\n\nจำนวน Finding: {len(findings)}" + fix_text)
     return subject, html, text
 
 

@@ -41,6 +41,7 @@ class Finding(BaseModel):
     plain_language_summary: str = ""
     business_impact: str = ""
     recommended_action: str = ""
+    fix_prompt: str = ""
     technical_details: str = ""
     technical_reference: str = ""
     ai_available: bool = False

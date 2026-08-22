@@ -42,6 +42,29 @@ def main() -> int:
         counts=count_by_severity(findings)
         score=max(0,100-counts["high"]*20-counts["medium"]*8-counts["low"]*2); risk="HIGH" if counts["high"] else "MEDIUM" if counts["medium"] else "LOW" if counts["low"] else "INFORMATIONAL"
         update(ref,status="COMPLETED",progress=100,phase="ประเมินเสร็จสมบูรณ์",finished_at=datetime.now(timezone.utc).isoformat(),security_score=score,overall_risk=risk,**counts)
+        # AI fix prompts for High/Medium findings (shown on the result page + emailed).
+        try:
+            if os.getenv("OPENAI_API_KEY"):
+                from scanner import ai_fix
+                from concurrent.futures import ThreadPoolExecutor
+                model=os.getenv("OPENAI_MODEL","gpt-4o-mini"); key=os.getenv("OPENAI_API_KEY"); base=os.getenv("OPENAI_BASE_URL","")
+                seen=set(); reps=[]
+                for f in findings:
+                    if (f["risk"] or "").lower().startswith(("high","medium")) and f["name"] not in seen:
+                        seen.add(f["name"]); reps.append(f)
+                reps=reps[:15]                                   # cap to bound token cost
+                if reps:
+                    with ThreadPoolExecutor(max_workers=min(8,len(reps))) as pool:
+                        prompts=dict(zip((r["name"] for r in reps), pool.map(lambda r: ai_fix.generate(r,model,key,base), reps)))
+                    updated=[]
+                    for f in findings:
+                        p=prompts.get(f["name"],"")
+                        if p: f["fix_prompt"]=p; updated.append(f)
+                    for i in range(0,len(updated),450):
+                        batch=client.batch()
+                        for item in updated[i:i+450]: batch.set(alerts.document(item["alert_id"]),item)
+                        batch.commit()
+        except Exception as exc: print(f"fix prompt gen failed: {exc}",file=sys.stderr)
         try:
             email=(ref.get().to_dict() or {}).get("notify_email")
             if email and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"):

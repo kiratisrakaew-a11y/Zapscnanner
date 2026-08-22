@@ -90,6 +90,9 @@ else
 fi
 gcloud secrets add-iam-policy-binding "$OPENAI_SECRET" \
   --member="serviceAccount:${WEB_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
+# Scanner job also needs the key to generate AI fix prompts for the email/report.
+gcloud secrets add-iam-policy-binding "$OPENAI_SECRET" \
+  --member="serviceAccount:${SCANNER_SA}" --role="roles/secretmanager.secretAccessor" >/dev/null
 
 # --- 6b. SMTP secret (optional email report) --------------------------------
 if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
@@ -126,16 +129,20 @@ build_image Dockerfile.scanner "$SCANNER_IMAGE"
 
 # --- 8. deploy scanner Job (ก่อน web) ---------------------------------------
 log "Deploy scanner Cloud Run Job"
-SCANNER_ENV="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SCAN_TIMEOUT_SECONDS=1800"
-SCANNER_SECRET_ARGS=()
+# OPENAI_* lets the scanner generate AI fix prompts for High/Medium findings
+# (shown on the result page + included in the email). Only set OPENAI_BASE_URL when
+# non-empty — an empty value makes the OpenAI SDK build a scheme-less URL.
+SCANNER_ENV="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SCAN_TIMEOUT_SECONDS=1800,OPENAI_MODEL=${OPENAI_MODEL}"
+if [ -n "$OPENAI_BASE_URL" ]; then SCANNER_ENV="${SCANNER_ENV},OPENAI_BASE_URL=${OPENAI_BASE_URL}"; fi
+SCANNER_SECRETS="OPENAI_API_KEY=${OPENAI_SECRET}:latest"
 if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
   SCANNER_ENV="${SCANNER_ENV},SMTP_HOST=${SMTP_HOST},SMTP_PORT=${SMTP_PORT},SMTP_USER=${SMTP_USER},SMTP_FROM=${SMTP_FROM}"
-  SCANNER_SECRET_ARGS=(--set-secrets "SMTP_PASSWORD=${SMTP_SECRET}:latest")
+  SCANNER_SECRETS="${SCANNER_SECRETS},SMTP_PASSWORD=${SMTP_SECRET}:latest"
 fi
 gcloud run jobs deploy zap-scanner \
   --image "$SCANNER_IMAGE" --region "$REGION" --service-account "$SCANNER_SA" \
   --cpu 2 --memory 8Gi --task-timeout 30m --max-retries 0 \
-  --set-env-vars "$SCANNER_ENV" "${SCANNER_SECRET_ARGS[@]}"
+  --set-env-vars "$SCANNER_ENV" --set-secrets "$SCANNER_SECRETS"
 
 # --- 9. deploy web Service --------------------------------------------------
 log "Deploy web Cloud Run Service"
