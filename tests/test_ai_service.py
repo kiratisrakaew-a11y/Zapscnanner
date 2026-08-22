@@ -58,6 +58,25 @@ def test_summarize_uses_openai(monkeypatch):
     assert out == "สรุปภาษาไทย"
 
 
+def test_summarize_prompt_is_grounded_in_counts(monkeypatch):
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            msg = types.SimpleNamespace(content=json.dumps({"executive_summary": "ok"}))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs): self.chat = types.SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    AIService(Settings(openai_api_key="x")).summarize("https://x", {"high": 0, "medium": 12, "low": 248, "info": 12}, ["CSP"])
+    sent = captured["messages"][0]["content"]
+    assert "Medium 12" in sent and "Low 248" in sent and "รวม 272" in sent   # counts stated explicitly
+    assert "ไม่มีช่องโหว่" in sent                                            # instruction forbidding false "no vulns"
+
+
 def test_base_url_without_scheme_gets_https(monkeypatch):
     captured = {}
 

@@ -30,7 +30,7 @@ docker run --rm -p 8080:8080 --env-file .env aegis-web
 docker network create zap-lab
 docker run -d --rm --name juice-shop --network zap-lab bkimminich/juice-shop
 docker run --rm --network zap-lab -v "$PWD/scanner:/zap/wrk/scanner:ro" \
-  -e TARGET_URL=http://juice-shop:3000 zaproxy/zap-stable:2.16.1 \
+  -e TARGET_URL=http://juice-shop:3000 zaproxy/zap-stable:2.17.0 \
   zap.sh -cmd -autorun /zap/wrk/scanner/zap_quick.yaml
 ```
 

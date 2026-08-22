@@ -50,10 +50,19 @@ class AIService:
         if not self.settings.openai_api_key:
             logger.warning("OPENAI_API_KEY not configured; no executive summary for %s", target)
             return ""
-        prompt = ("เขียนบทสรุปผู้บริหาร (Executive Summary) ภาษาไทยเชิงธุรกิจ 3-5 ประโยค จากผลสแกนความปลอดภัยเว็บนี้ "
-                  "ห้ามแต่งข้อมูลเกินจากที่ให้ ตอบเป็น JSON object รูปแบบ {\"executive_summary\": \"...\"}\n"
-                  f"target={target} counts={json.dumps(counts, ensure_ascii=False)} "
-                  f"alert_types={json.dumps(names[:60], ensure_ascii=False)}")
+        high, medium, low, info = (counts.get(k, 0) for k in ("high", "medium", "low", "info"))
+        total = high + medium + low + info
+        prompt = (
+            "เขียนบทสรุปผู้บริหาร (Executive Summary) ภาษาไทยเชิงธุรกิจ 3-5 ประโยค จากผลสแกนความปลอดภัยเว็บนี้\n"
+            f"เป้าหมาย: {target}\n"
+            f"ผลสแกนพบช่องโหว่: High {high}, Medium {medium}, Low {low}, Info {info} (รวม {total} รายการ)\n"
+            f"ตัวอย่างประเภทที่พบ: {json.dumps(names[:60], ensure_ascii=False)}\n\n"
+            "กติกา (สำคัญมาก):\n"
+            "1) บทสรุปต้องสอดคล้องกับตัวเลขข้างบนเสมอ ห้ามขัดกับจำนวนที่พบ\n"
+            "2) ถ้ามีรายการมากกว่า 0 ในระดับใด ห้ามระบุว่าเว็บ 'ปลอดภัย' หรือ 'ไม่มีช่องโหว่' เด็ดขาด "
+            "ให้ระบุจำนวนและระดับที่พบ และเน้นระดับที่รุนแรงที่สุดที่เจอ\n"
+            "3) ระบุสิ่งที่ควรทำต่อโดยย่อ; ห้ามแต่งข้อมูลเกินจากที่ให้\n"
+            "ตอบเป็น JSON object รูปแบบ {\"executive_summary\": \"...\"} เท่านั้น")
         try:
             response = self._client().chat.completions.create(model=self.settings.openai_model, messages=[{"role": "user", "content": prompt}], response_format={"type": "json_object"})
             return json.loads(response.choices[0].message.content).get("executive_summary", "") or ""
