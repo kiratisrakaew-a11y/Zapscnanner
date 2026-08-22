@@ -5,6 +5,8 @@ env:
 jobs:
   - type: spider
     parameters: {context: target, maxDuration: 5, maxDepth: 10, maxChildren: 20}
+  - type: spiderAjax
+    parameters: {context: target, maxDuration: 5, maxCrawlDepth: 10, numberOfBrowsers: 1, browserId: firefox-headless}
   - type: passiveScan-wait
   - type: activeScan
     parameters: {context: target, maxScanDurationInMins: 20}

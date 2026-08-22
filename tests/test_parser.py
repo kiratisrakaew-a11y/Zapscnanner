@@ -15,6 +15,16 @@ def test_spider_scope_is_bounded():
         assert spider.get("maxDepth"), f"{plan}: spider missing maxDepth"
         assert spider.get("maxChildren"), f"{plan}: spider missing maxChildren"
 
+
+def test_ajax_spider_is_configured():
+    """AJAX spider (JS-rendering crawler) must be present so SPA sites (Vercel/Netlify)
+    that build their DOM in JavaScript get properly crawled before the active scan."""
+    for plan in ("zap_quick.yaml", "zap_standard.yaml"):
+        jobs = yaml.safe_load((SCANNER / plan).read_text())["jobs"]
+        ajax = next((j for j in jobs if j["type"] == "spiderAjax"), None)
+        assert ajax, f"{plan}: missing spiderAjax job"
+        assert ajax["parameters"].get("browserId") == "firefox-headless", f"{plan}: ajax browserId wrong"
+
 def test_parse_zap_report(tmp_path):
     report={"site":[{"@name":"https://example.com","alerts":[{"pluginid":"10038","alert":"Content Security Policy Header Not Set","riskdesc":"Medium (Medium)","confidence":"High","desc":"missing","solution":"add it","instances":[{"uri":"https://example.com/","evidence":"none"}]}]}]}
     path=tmp_path/"report.json"; path.write_text(json.dumps(report))

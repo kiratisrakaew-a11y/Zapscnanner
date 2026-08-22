@@ -5,6 +5,8 @@ env:
 jobs:
   - type: spider
     parameters: {context: target, maxDuration: 5, maxDepth: 10, maxChildren: 20}
+  - type: spiderAjax
+    parameters: {context: target, maxDuration: 5, maxCrawlDepth: 10, numberOfBrowsers: 1, browserId: firefox-headless}
   - type: passiveScan-wait
   - type: report
     parameters: {template: traditional-json, reportDir: /zap/wrk, reportFile: zap-report.json}
