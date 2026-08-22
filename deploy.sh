@@ -134,7 +134,7 @@ if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
 fi
 gcloud run jobs deploy zap-scanner \
   --image "$SCANNER_IMAGE" --region "$REGION" --service-account "$SCANNER_SA" \
-  --cpu 2 --memory 4Gi --task-timeout 30m --max-retries 0 \
+  --cpu 2 --memory 8Gi --task-timeout 30m --max-retries 0 \
   --set-env-vars "$SCANNER_ENV" "${SCANNER_SECRET_ARGS[@]}"
 
 # --- 9. deploy web Service --------------------------------------------------

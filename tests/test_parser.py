@@ -1,6 +1,19 @@
 import json
+from pathlib import Path
+import yaml
 from scanner.parse_report import parse_report
 from scanner.run_scan import _bucket, dedupe, count_by_severity
+
+SCANNER = Path(__file__).resolve().parent.parent / "scanner"
+
+def test_spider_scope_is_bounded():
+    """Spider must cap depth+children so SPA sites (200 on every path) can't crawl
+    unboundedly and OOM the scanner job. Regression guard for the Vercel/Netlify failures."""
+    for plan in ("zap_quick.yaml", "zap_standard.yaml"):
+        jobs = yaml.safe_load((SCANNER / plan).read_text())["jobs"]
+        spider = next(j for j in jobs if j["type"] == "spider")["parameters"]
+        assert spider.get("maxDepth"), f"{plan}: spider missing maxDepth"
+        assert spider.get("maxChildren"), f"{plan}: spider missing maxChildren"
 
 def test_parse_zap_report(tmp_path):
     report={"site":[{"@name":"https://example.com","alerts":[{"pluginid":"10038","alert":"Content Security Policy Header Not Set","riskdesc":"Medium (Medium)","confidence":"High","desc":"missing","solution":"add it","instances":[{"uri":"https://example.com/","evidence":"none"}]}]}]}
